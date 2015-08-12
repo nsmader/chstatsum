@@ -1,0 +1,8 @@
+Package: tcbTools
+Title: Miscellaneous Utilities for Describing Data
+Version: 0.0.0.9000
+Authors@R: person("Nick", "Mader", email = "nsmader@gmail.com", role = c("aut", "cre"))
+Description: This package allows for rapid calculation of many statistics, subsets, and variables within a data set. This combines use of the data.table, pastecs, and reshape2 packages into an easy to use wrapper for performing involved calculations.
+Depends: R (>= 3.2.1)
+License: GNU Affero General Public License
+LazyData: true
