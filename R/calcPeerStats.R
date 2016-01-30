@@ -40,21 +40,6 @@ peerStats.fn <- function(myProps, myVar, mySchStats){
 
 ### calcPeerStats --------------------------------------------------------------
 
-set.seed(60637)
-try(detach(data), silent = TRUE)
-data <- data.frame(focal.ind = rep(c(T, F), each = 12),
-                   ref.cat = rep(c("A", "B", "C"), times = 8),
-                   val = sample(1:10, 24, replace = TRUE),
-                   by.var = sample(c("sweet", "salty", "bitter", "sour"), 24, replace = TRUE),
-                   stringsAsFactors = FALSE,
-                   id = 1:24)
-data <- data[order(data$ref.cat),]
-attach(data)
-desc.vars <- "val"
-ref.cat <- "ref.cat"
-by.vars <- "by.var"
-id <- "id"
-
 calcPeerStats <- function(data, desc.vars, focal.ind, ref.cat, by.vars, id = NULL){
   
   # Abbreivations are:
