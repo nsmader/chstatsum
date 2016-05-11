@@ -21,7 +21,7 @@ cars_l <- melt(mtcars,
                id.vars = c("model", "merc", "gear"))
 dt_l <- data.table(cars_l, key = "merc,gear,variable")
 
-### Miscellaneous experiementation with automatic variables created in data.table ----
+### Miscellaneous experimentation with automatic variables created in data.table ----
 merc_l <- dt_l[merc == 1]
 test_l <- merc_l[, list(dot_i = .I,
                         dot_grp = .GRP,
@@ -63,6 +63,16 @@ avgMpgPeer_cv <- dt[,
 avgMpgPeer_cv
 dt[cyl == 4 & vs == 1 & gear != 3, mean(mpg)]
 
+# Confirming the ability to take multiple steps within an i or j component
+avgMpgPeer_cv2 <- dt[,
+                    dt[{myGrp <- unique(dt$gear)[.GRP]
+                        !(gear %in% myGrp)},
+                       mean(mpg),
+                       by = "cyl,vs"],
+                    by = "gear"]
+identical(avgMpgPeer_cv, avgMpgPeer_cv2) # TRUE
+
+
 # Note: in our peer stats application, we're only ever excluding based on one
 # criterion, i.e. that student's aren't enrolled in a given program
 
@@ -99,7 +109,7 @@ checkProps <- unique(dt_cgm[gear == 3 & meas == "mpg", .(gear, cyl, wgt_c)])
 colSums(checkProps)
 
 
-### 2. Calculate averages and variances across all non-focal observations
+### 2. Calculate averages and variances across all non-focal observations ------
 # Note: this procedure would be good for doing calculations for an entire slice
 # var rather than just each slice value of a given slice var at a time. E.g.,
 # instead of calculating the sch-based peer stats for the YMCA's CSI program,

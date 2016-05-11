@@ -38,17 +38,24 @@ youthdata <- within(youthdata, {
 
 
 
-### Generate data to demonstrate calcPeerStats function ------------------------
+### Generate data to demonstrate peerstats function ----------------------------
 set.seed(60637)
-data <- data.frame(focal.ind = rep(c(T, F), each = 12),
-                   ref.cat = rep(c("A", "B", "C"), times = 8),
-                   val = sample(1:10, 24, replace = TRUE),
-                   by.var = sample(c("sweet", "salty", "bitter", "sour"), 24, replace = TRUE),
-                   stringsAsFactors = FALSE,
-                   id = 1:24)
-data <- data[order(data$ref.cat),]
-# attach(data)
-# desc.vars <- "val"
-# ref.cat <- "ref.cat"
-# by.vars <- "by.var"
-# id <- "id"
+n <- 24
+peerdata <- data.frame(id = 1:24,
+                       program = rep(c("Prog A", "Prog B", "Prog C"), each  = n/3),
+                       school = rep(c("Sch 1", "Sch 2", "Sch 3"), times = n/3),
+                       value1 = 1:n,
+                       value2 = sample(1:10, n, replace = TRUE),
+                       flavor = sample(c("sweet", "salty", "bitter", "sour"), n, replace = TRUE),
+                       stringsAsFactors = FALSE)
+# Add in missings
+peerdata$value1[runif(n) < 0.1] <- NA
+peerdata$value2[runif(n) < 0.1] <- NA
+
+# Add in duplicate youth
+dup <- peerdata[c(1, 10, 20),]
+dup$program <- "Prog D"
+peerdata <- rbind(peerdata,dup)
+
+
+peerdata <- peerdata[order(peerdata$school),]
