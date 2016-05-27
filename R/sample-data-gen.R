@@ -15,7 +15,7 @@ youthdata <- data.frame(id = 1:n,
                                             size = n,
                                             replace = TRUE),
                                      " School"),
-                        cat = sample(c("Bitter", "Sweet", "Sour", "Salty"),
+                        cat = sample(c("Treble", "Bass"),
                                      size = n,
                                      replace = TRUE),
                         x1 = runif(n)*10,
@@ -44,13 +44,13 @@ n <- 24
 peerdata <- data.frame(id = 1:24,
                        program = rep(c("Prog A", "Prog B", "Prog C"), each  = n/3),
                        school = rep(c("Sch 1", "Sch 2", "Sch 3"), times = n/3),
-                       value1 = 1:n,
-                       value2 = sample(1:10, n, replace = TRUE),
-                       flavor = sample(c("sweet", "salty", "bitter", "sour"), n, replace = TRUE),
+                       val1 = 1:n,
+                       val2 = sample(1:10, n, replace = TRUE),
+                       flavor = sample(c("treble", "bass"), n, replace = TRUE),
                        stringsAsFactors = FALSE)
 # Add in missings
-peerdata$value1[runif(n) < 0.1] <- NA
-peerdata$value2[runif(n) < 0.1] <- NA
+peerdata$val1[runif(n) < 0.1] <- NA
+peerdata$val2[runif(n) < 0.1] <- NA
 
 # Add in duplicate youth
 dup <- peerdata[c(1, 10, 20),]
