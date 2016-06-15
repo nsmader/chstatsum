@@ -25,11 +25,11 @@ library("pastecs")
 
 #data = mtcars; descvars = c("disp", "hp", "drat", "wt", "mpg"); focalcat = "gear"; refcat = "cyl"; byvars = "vs"; id = "model"
 source("sample-data-gen.R")
-data = peerdata; descvars = c("val1", "val2"); focalcat = "program"; refcat = "school"; byvars = "flavor"; idvar = "id"
+data = peerdata; descvars = c("val1", "val2"); focalcat = "program"; refcat = "school"; byvars = "clef"; idvar = "id"
 bfrCats <- unique(data[, c(focalcat, refcat, byvars)])
 dim(bfrCats)
 
-peerstats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consider whether idvar is a required argument. Perhaps could create a unique one if not supplied, e.g. based off of 1:nrow(data)
+PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consider whether idvar is a required argument. Perhaps could create a unique one if not supplied, e.g. based off of 1:nrow(data)
   # Establish data as a properly-indexed data table
   if ("data.table" %in% class(data)){
     dt <- data
@@ -66,15 +66,16 @@ peerstats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
                    .SDcols = descvars
                  ] %>%
     melt(id.vars = c(byvars, focalcat, refcat), # This is a special version of melt (coming from the data.table package) allows for the measure.vars argument, which allows us to output multiple column values, so that the result is semi-wide
-         measure.vars = patterns("\\d$", "_f$"),
-         value.name = c("n_bfr", "n_bf")) %>%
+         measure.vars = list(descvars, paste0(descvars, "_f")),
+         value.name = c("n_bfrv", "n_bfv"),
+         variable.name = "descvar") %>%
     within({
-      variable <- descvars[variable] # By default, melt() creates the "variable" field to have values 1, 2, etc. This line uses those numbers to select the names of the descvars
-      wgt_bfr  <- n_bfr / n_bf # This is the weight 
-      wgt2_bfr <- wgt_bfr^2 # This is the weight used for averaging variances. This can be seen by the fact that Var(w1*x1 + w2*x2) = w1^2*Var(x1) + w2^2*Var(x2)
-      #rm(n_bfr, n_bf)
+      descvar <- descvars[descvar] # By default, melt() creates the "variable" field to have values 1, 2, etc. This line uses those numbers to select the names of the descvars
+      wgt_bfrv  <- n_bfrv / n_bfv # This is the weight 
+      wgt2_bfrv <- wgt_bfrv^2 # This is the weight used for averaging variances. This can be seen by the fact that Var(w1*x1 + w2*x2) = w1^2*Var(x1) + w2^2*Var(x2)
+      #rm(n_bfrv, n_bfv)
     }) 
-                                           
+  #wgt_bfrv[with(wgt_bfrv, order(cbind(clef, program)))]
   
   ### Calculate avgs
   # Explanation for this method is:
@@ -84,7 +85,7 @@ peerstats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
   # (3) Subsets to rows that have the same by variables, by which do *not* 
   #     have the same focal category. E.g., still focus on males, but identify
   #     those that are *not* in the program of focus.
-  # (4) Within this subset, calculate the mean and variance of each dependent
+  # (4) Within this subset, calculate the mean, variance, and n of each dependent
   #     variable within each reference category (e.g. within each school). Note 
   #     that the two values output by function(dv) are output vertically rather
   #     than horizontally. Thus...
@@ -97,35 +98,48 @@ peerstats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
   #     run wide.
   # /!\ NSM: I believe that data.table has optimized reshaping
   # commands that allows for a simultaneous melt/cast step.
-  setkeyv(dt, c(vBf, id))
+  setkeyv(dt, c(vBf, idvar))
   bf_combos <- unique(dt[, vBf, with = FALSE])
-  
+
   #bf_combos <- unique(dt[,.(lapply(c(byvars, focalcat), get, envir=as.environment(dt)))]) # the lapply() returns the focalcats as column names, and the unique() returns unique combinations among which 
   avg_bfrv <- dt[,
                  dt[{
+                     # .GRP <- 1 ... auditing step
                      myByVars <- bf_combos[.GRP] # (2) Get values associated with the current "by"
-                     myIds <- unique(dt[myByVars, id]) # /!\ myByVars isn't subsetting properly
+                     byVarMatches <- apply(sapply(byvars, function(m) dt[, get(m)] %in% myByVars[,get(m)]), 1, function(b) mean(b) == 1)  
+                       # This returns rows that match all by variables
+                     myIds <- unique(dt[myByVars, get(idvar)]) # /!\ myByVars isn't subsetting properly
                      myFocCat <- myByVars[, .(get(focalcat))]
-                     !(get(focalcat) %in% myFocCat | get(idvar) %in% myIds) # (3) Exclude own rows from calculation
+                     byVarMatches <- apply(sapply(byvars, function(m) dt[, get(m)] %in% myByVars[, get(m)]), 1, mean) == 1
+                     !(get(focalcat) %in% myFocCat | get(idvar) %in% myIds) & byVarMatches # (3)
+                     # attach(dt)
+                     # cbind(dt, !(get(focalcat) %in% myFocCat | get(idvar) %in% myIds) & byVarMatches)
+                     # detach(dt)
                     },
                     lapply(.SD, function(dv) c(mean(dv, na.rm = TRUE),
-                                                var(dv, na.rm = TRUE))), # (4)
+                                                var(dv, na.rm = TRUE),
+                                                sum(!is.na(dv)))), # (4)
                     by = refcat,
                     .SDcols = descvars],
                  by = bf][ # (1)
-    , "stat":=c("mean", "var")] %>% # (5)
-    melt(id.vars = c(byvars, focalcat, refcat, "stat"), variable.name = "descvar") %>% # (6)
-    dcast(as.formula(paste0(bfr_plus, " + descvar ~ + stat")), value.var = "value") # (7)
+    , "stat":=c("mean", "var", "n")] %>% # (5)
+    melt(id.vars = c(byvars, focalcat, refcat, "stat"),
+         variable.name = "descvar") %>% # (6)
+    dcast(as.formula(paste0(bfr_plus, " + descvar ~ stat")),
+          value.var = "value") %>% # (7)
+    data.table()
   
   ### Merge weights
-  avgWgt_bfrv <- merge(x = avg_bfrv, y = wgt_bfrv, by = c(byvars, focalcat, refcat))
+  avgWgt_bfrv <- merge(x = avg_bfrv,
+                       y = wgt_bfrv,
+                       by = c(byvars, focalcat, refcat, "descvar"))
   
   # Weight, calculate, output
   peerCalc <- avgWgt_bfrv[,
-                          .(mean = weighted.mean(x = mean, w = wgt_bfr),
-                            var  = weighted.mean(x = var,  w = wgt2_bfr),
-                            n    = sum(wgt_bfr)),
-                          by = c(byvars, focalcat, "variable")] %>%
+                          .(mean = weighted.mean(x = mean, w = wgt_bfrv),
+                            var  = weighted.mean(x = var,  w = wgt2_bfrv),
+                            n    = weighted.mean(x = n,    w = wgt_bfrv)),
+                          by = c(byvars, focalcat, "descvar")] %>%
     within({
       stderr <- sqrt(var)
       rm(var)
@@ -133,11 +147,35 @@ peerstats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
   
   return(peerCalc)
 }
-z <- within(data, rm("program"))
-peerstats(data = data,
-          descvars = c("val1", "val2"),
-          focalcat = "program",
-          refcat   = "school",
-          byvars = "flavor",
-          idvar = "id")
+
+myPeerStats <- PeerStats(data = peerdata,
+                         descvars = c("val1", "val2"),
+                         focalcat = "program",
+                         refcat   = "school",
+                         byvars = "clef",
+                         idvar = "id")
+# Spot-checking value with treble Prog D, both variables, since there are (1) missings
+# between the two descriptive variables, and one of the enrolled students (id=1)
+# is duplicate (also enrolled with program A)
+myEsts <- subset(myPeerStats, clef == "treble" & program == "Prog D")
+focals <- subset(peerdata, clef == "treble" & program == "Prog D")
+props <- prop.table(table(focals$school))
+peers <- subset(peerdata, clef == "treble" & program != "Prog D" &
+                  school %in% unique(focals$school) &
+                  !(id %in% focals$id))
+library(plyr)
+peermean <- ddply(peers, .(school), summarize,
+                  val1_mean = mean(val1, na.rm = TRUE),
+                  val1_var  =  var(val1, na.rm = TRUE),
+                  val1_n    =  sum(!is.na(val1)),
+                  val2_mean = mean(val2, na.rm = TRUE),
+                  val2_var  =  var(val2, na.rm = TRUE),
+                  val2_n    =  sum(!is.na(val2)))
+peermeanwgt <- merge(peermean)
+
+
+### Notes
+# - Warning: calculating focal proportions only for focals that have a non-missing value
+#   Check what the current procedure is, and make a note of this option. Could see 
+#   doing this either way.
 

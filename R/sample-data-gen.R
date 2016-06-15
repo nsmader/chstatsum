@@ -46,7 +46,7 @@ peerdata <- data.frame(id = 1:24,
                        school = rep(c("Sch 1", "Sch 2", "Sch 3"), times = n/3),
                        val1 = 1:n,
                        val2 = sample(1:10, n, replace = TRUE),
-                       flavor = sample(c("treble", "bass"), n, replace = TRUE),
+                       clef = sample(c("treble", "bass"), n, replace = TRUE),
                        stringsAsFactors = FALSE)
 # Add in missings
 peerdata$val1[runif(n) < 0.1] <- NA
