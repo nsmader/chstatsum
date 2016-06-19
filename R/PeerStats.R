@@ -19,25 +19,22 @@
 library("data.table")
 library("magrittr")
 library("pastecs")
-#library("reshape2") ... data.table should have the reshape commands that we need
 
 ### New, data.table-based method -----------------------------------------------
 
-#data = mtcars; descvars = c("disp", "hp", "drat", "wt", "mpg"); focalcat = "gear"; refcat = "cyl"; byvars = "vs"; id = "model"
-source("sample-data-gen.R")
-data = peerdata; descvars = c("val1", "val2"); focalcat = "program"; refcat = "school"; byvars = "clef"; idvar = "id"
-bfrCats <- unique(data[, c(focalcat, refcat, byvars)])
-dim(bfrCats)
-
 PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consider whether idvar is a required argument. Perhaps could create a unique one if not supplied, e.g. based off of 1:nrow(data)
-  # Establish data as a properly-indexed data table
+  ### Remove duplicate rows
+  bDup <- duplicated(data)
+  data <- data[!bDup,]
+  
+  ### Establish data as a properly-indexed data table
   if ("data.table" %in% class(data)){
     dt <- data
   } else {
     dt <- data.table(data, key = paste(focalcat, refcat, byvars, sep = ","))
   }
   
-  # Set up by shorthand
+  ### Set up by shorthand
   bf  <- paste(byvars, focalcat,         sep = ",")
   bfr <- paste(byvars, focalcat, refcat, sep = ",")
   br  <- paste(byvars,           refcat, sep = ",")
@@ -58,7 +55,7 @@ PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
   # data.table objects, and also allows simpler handling of melting multiple columns.
 
   wgt_bfrv <- dt[, # Calculate by/foc/ref non-missing counts, which is the numerator for weights
-                 lapply(.SD, function(dv) sum(!is.na(dv))),
+                 lapply(.SD, function(dv) length(dv)), # /!\ Another way to build weights is based on how many of the focal youth have non-missing values of each variable--using sum(!is.na(dv)). However, that would lead to different peer composition across measures, which seems peculiar (and worth avoiding)
                  by = bfr,
                  .SDcols = descvars][,  # Chain in aggregation of by/foc/ref counts across ref groups to get a denominator.
                    paste0(descvars, "_f") := lapply(.SD, function(n_bfr) sum(n_bfr)),
@@ -134,48 +131,20 @@ PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
                        y = wgt_bfrv,
                        by = c(byvars, focalcat, refcat, "descvar"))
   
-  # Weight, calculate, output
+  ### Weight, calculate, output
   peerCalc <- avgWgt_bfrv[,
-                          .(mean = weighted.mean(x = mean, w = wgt_bfrv),
-                            var  = weighted.mean(x = var,  w = wgt2_bfrv),
-                            n    = weighted.mean(x = n,    w = wgt_bfrv)),
+                          .(mean    = weighted.mean(x = mean, w = wgt_bfrv),
+                            var     = weighted.mean(x = var,  w = wgt2_bfrv),
+                            nbr.val = weighted.mean(x = n,    w = wgt_bfrv)), 
                           by = c(byvars, focalcat, "descvar")] %>%
     within({
-      stderr <- sqrt(var)
+      SE.mean <- sqrt(var)
       rm(var)
     })
+    # Note: these variable names (e.g. "nbr.val" and "SE.mean) are chosen to be
+    # consistent with the output of the SliceStats which, in turn, is consistent
+    # with the output of the stat.desc() function, all of whose calculations are
+    # available in the SliceStats function.
   
   return(peerCalc)
 }
-
-myPeerStats <- PeerStats(data = peerdata,
-                         descvars = c("val1", "val2"),
-                         focalcat = "program",
-                         refcat   = "school",
-                         byvars = "clef",
-                         idvar = "id")
-# Spot-checking value with treble Prog D, both variables, since there are (1) missings
-# between the two descriptive variables, and one of the enrolled students (id=1)
-# is duplicate (also enrolled with program A)
-myEsts <- subset(myPeerStats, clef == "treble" & program == "Prog D")
-focals <- subset(peerdata, clef == "treble" & program == "Prog D")
-props <- prop.table(table(focals$school))
-peers <- subset(peerdata, clef == "treble" & program != "Prog D" &
-                  school %in% unique(focals$school) &
-                  !(id %in% focals$id))
-library(plyr)
-peermean <- ddply(peers, .(school), summarize,
-                  val1_mean = mean(val1, na.rm = TRUE),
-                  val1_var  =  var(val1, na.rm = TRUE),
-                  val1_n    =  sum(!is.na(val1)),
-                  val2_mean = mean(val2, na.rm = TRUE),
-                  val2_var  =  var(val2, na.rm = TRUE),
-                  val2_n    =  sum(!is.na(val2)))
-peermeanwgt <- merge(peermean)
-
-
-### Notes
-# - Warning: calculating focal proportions only for focals that have a non-missing value
-#   Check what the current procedure is, and make a note of this option. Could see 
-#   doing this either way.
-

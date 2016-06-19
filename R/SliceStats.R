@@ -15,21 +15,6 @@ library("data.table")
 library("pastecs")
 library("magrittr")
 
-data <- youthdata; vars = c("x1", "x2", "y"); slicevars <- c("org_A", "prog", "cat");
-stats <- c("mean", "SE.mean", "nbr.val"); suppress_n = NULL; id_delim = "__"; label = FALSE
-test <- SliceStats(data = youthdata,
-                   vars = c("x1", "x2"),
-                   slicevars = c("prog", "cat"),
-                   stats = c("mean", "nbr.val"))
-cartest <- SliceStats(data = mtcars,
-                      vars = c("wt", "hp", "mpg"),
-                      slicevars = c("cyl", "gear"),
-                      stats = c("mean", "nbr.val"))
-peertest <- SliceStats(data = peerdata, 
-                       vars = c("val1", "val2"),
-                       slicevars = c("clef", "program"),
-                       suppress_n = 3)
-
 SliceStats <- function(data, vars, slicevars, stats = c("mean", "SE.mean", "nbr.val"), suppress_n = NULL, id_delim = "__", label = FALSE){
   ### Set up inputs to the calculations
   statNames <- names(stat.desc(runif(2))) 
@@ -38,8 +23,13 @@ SliceStats <- function(data, vars, slicevars, stats = c("mean", "SE.mean", "nbr.
   nslicevars <- length(vslicevars)
   fmslice.var <- paste(vslicevars, collapse = " + ")
   
+  ### Remove duplicate rows
+  dtData <- data.table(data)
+  bDup <- duplicated(dtData)
+  dtData <- dtData[!bDup,]
+  setkeyv(dtData, cols = vslicevars)
+  
   ### Run calculations and select desired output
-  dtData <- data.table(data, key = cslicevars)
   dtStats <- dtData[, lapply(.SD, stat.desc), by = cslicevars, .SDcols = vars]
   dtStats$stat <- statNames
   dtStats <- dtStats[stat %in% stats]
