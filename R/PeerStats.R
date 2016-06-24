@@ -18,29 +18,29 @@
 
 library("data.table")
 library("magrittr")
-library("pastecs")
 
-### New, data.table-based method -----------------------------------------------
-
-PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consider whether idvar is a required argument. Perhaps could create a unique one if not supplied, e.g. based off of 1:nrow(data)
-  ### Remove duplicate rows
-  bDup <- duplicated(data)
-  data <- data[!bDup,]
-  
-  ### Establish data as a properly-indexed data table
-  if ("data.table" %in% class(data)){
-    dt <- data
-  } else {
-    dt <- data.table(data, key = paste(focalcat, refcat, byvars, sep = ","))
-  }
+PeerStats <- function(data, descvars, focalcat, refcat, byvars = NULL, idvar){ # Consider whether idvar is a required argument. Perhaps could create a unique one if not supplied, e.g. based off of 1:nrow(data)
   
   ### Set up by shorthand
-  bf  <- paste(byvars, focalcat,         sep = ",")
-  bfr <- paste(byvars, focalcat, refcat, sep = ",")
-  br  <- paste(byvars,           refcat, sep = ",")
+  cbyvars <- paste(byvars, collapse = ",")
+  bf  <- paste(cbyvars, focalcat,         sep = ",")
+  bfr <- paste(cbyvars, focalcat, refcat, sep = ",")
+  br  <- paste(cbyvars,           refcat, sep = ",")
   bfr_plus <- paste(c(byvars, focalcat, refcat), collapse = " + ")
   dv_plus  <- paste(descvars, collapse = " + ")
   vBf <- c(unlist(strsplit(byvars, split = ",")), focalcat)
+  
+  ### Establish data as a properly-indexed data table
+  if ("data.table" %in% class(data)){
+    dt <- setkeyv(data, cols = c(focalcat, refcat, byvars))
+  } else {
+    dt <- data.table(data, key = paste(focalcat, refcat, cbyvars, sep = ","))
+  }
+  
+  ### Remove duplicate rows
+  bDup <- duplicated(dt, by = NULL) # If not set to NULL, duplicated.data.table looks for duplicates by the key. We want to look across all columns
+  data <- dt[!bDup,]
+  descvars <- unique(descvars)
   
   ### Calculate n's, first by all by/focal/reference categories, and then by
   # chaining in an aggregation to additionally also calculate by+focal Ns
@@ -53,15 +53,15 @@ PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
   # Also note that the melt() function below comes from the data.table package,
   # rather than the reshape2 package. It is one that runs more efficiently with
   # data.table objects, and also allows simpler handling of melting multiple columns.
-
+  
   wgt_bfrv <- dt[, # Calculate by/foc/ref non-missing counts, which is the numerator for weights
                  lapply(.SD, function(dv) length(dv)), # /!\ Another way to build weights is based on how many of the focal youth have non-missing values of each variable--using sum(!is.na(dv)). However, that would lead to different peer composition across measures, which seems peculiar (and worth avoiding)
                  by = bfr,
                  .SDcols = descvars][,  # Chain in aggregation of by/foc/ref counts across ref groups to get a denominator.
-                   paste0(descvars, "_f") := lapply(.SD, function(n_bfr) sum(n_bfr)),
-                   by = bf,
-                   .SDcols = descvars
-                 ] %>%
+                                     paste0(descvars, "_f") := lapply(.SD, function(n_bfr) as.integer(sum(n_bfr))),
+                                     by = bf,
+                                     .SDcols = descvars
+                                     ] %>%
     melt(id.vars = c(byvars, focalcat, refcat), # This is a special version of melt (coming from the data.table package) allows for the measure.vars argument, which allows us to output multiple column values, so that the result is semi-wide
          measure.vars = list(descvars, paste0(descvars, "_f")),
          value.name = c("n_bfrv", "n_bfv"),
@@ -95,31 +95,32 @@ PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
   #     run wide.
   # /!\ NSM: I believe that data.table has optimized reshaping
   # commands that allows for a simultaneous melt/cast step.
+  
   setkeyv(dt, c(vBf, idvar))
   bf_combos <- unique(dt[, vBf, with = FALSE])
-
+  
   #bf_combos <- unique(dt[,.(lapply(c(byvars, focalcat), get, envir=as.environment(dt)))]) # the lapply() returns the focalcats as column names, and the unique() returns unique combinations among which 
   avg_bfrv <- dt[,
                  dt[{
-                     # .GRP <- 1 ... auditing step
-                     myByVars <- bf_combos[.GRP] # (2) Get values associated with the current "by"
-                     byVarMatches <- apply(sapply(byvars, function(m) dt[, get(m)] %in% myByVars[,get(m)]), 1, function(b) mean(b) == 1)  
-                       # This returns rows that match all by variables
-                     myIds <- unique(dt[myByVars, get(idvar)]) # /!\ myByVars isn't subsetting properly
-                     myFocCat <- myByVars[, .(get(focalcat))]
-                     byVarMatches <- apply(sapply(byvars, function(m) dt[, get(m)] %in% myByVars[, get(m)]), 1, mean) == 1
-                     !(get(focalcat) %in% myFocCat | get(idvar) %in% myIds) & byVarMatches # (3)
-                     # attach(dt)
-                     # cbind(dt, !(get(focalcat) %in% myFocCat | get(idvar) %in% myIds) & byVarMatches)
-                     # detach(dt)
-                    },
-                    lapply(.SD, function(dv) c(mean(dv, na.rm = TRUE),
-                                                var(dv, na.rm = TRUE),
-                                                sum(!is.na(dv)))), # (4)
-                    by = refcat,
-                    .SDcols = descvars],
+                   # .GRP <- 1 ... auditing step
+                   myByVars <- bf_combos[.GRP] # (2) Get values associated with the current "by"
+                   byVarMatches <- apply(sapply(byvars, function(m) dt[, get(m)] %in% myByVars[,get(m)]), 1, function(b) mean(b) == 1)  
+                   # This returns rows that match all by variables
+                   myIds <- unique(dt[myByVars, get(idvar)]) # /!\ myByVars isn't subsetting properly
+                   myFocCat <- myByVars[, .(get(focalcat))]
+                   byVarMatches <- apply(sapply(byvars, function(m) dt[, get(m)] %in% myByVars[, get(m)]), 1, mean) == 1
+                   !(get(focalcat) %in% myFocCat | get(idvar) %in% myIds) & byVarMatches # (3)
+                   # attach(dt)
+                   # cbind(dt, !(get(focalcat) %in% myFocCat | get(idvar) %in% myIds) & byVarMatches)
+                   # detach(dt)
+                 },
+                 lapply(.SD, function(dv) c(mean(dv, na.rm = TRUE),
+                                            var(dv, na.rm = TRUE),
+                                            sum(!is.na(dv)))), # (4)
+                 by = refcat,
+                 .SDcols = descvars],
                  by = bf][ # (1)
-    , "stat":=c("mean", "var", "n")] %>% # (5)
+                   , "stat":=c("mean", "var", "n")] %>% # (5)
     melt(id.vars = c(byvars, focalcat, refcat, "stat"),
          variable.name = "descvar") %>% # (6)
     dcast(as.formula(paste0(bfr_plus, " + descvar ~ stat")),
@@ -141,10 +142,10 @@ PeerStats <- function(data, descvars, focalcat, refcat, byvars, idvar){ # Consid
       SE.mean <- sqrt(var)
       rm(var)
     })
-    # Note: these variable names (e.g. "nbr.val" and "SE.mean) are chosen to be
-    # consistent with the output of the SliceStats which, in turn, is consistent
-    # with the output of the stat.desc() function, all of whose calculations are
-    # available in the SliceStats function.
+  # Note: these variable names (e.g. "nbr.val" and "SE.mean) are chosen to be
+  # consistent with the output of the SliceStats which, in turn, is consistent
+  # with the output of the stat.desc() function, all of whose calculations are
+  # available in the SliceStats function.
   
   return(peerCalc)
 }

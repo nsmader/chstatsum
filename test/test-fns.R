@@ -58,8 +58,12 @@ with(checkmerge, all(n == nbr.val, na.rm = TRUE))
 
 
 #------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------#
 ### Test Peer Stats Data -------------------------------------------------------
 #------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------#
+
+### Test Peer Stats code against fake data--------------------------------------
 peertest <- PeerStats(data = progdata,
                       descvars = c("val1", "val2"),
                       focalcat = "program",
@@ -106,7 +110,20 @@ with(check.stats, all(SE.mean == se_mu))
 with(check.stats, all(nbr.val == n))
 
 
-### Notes
+### Test whether peer stats works without a focal cat (and only by vars) -------
+# The result should be a calculation of 
+
+nofoc.test <- PeerStats(data = progdata,
+                        descvars = c("val1", "val2"),
+                        refcat   = "school",
+                        byvars = c("clef", "program"),
+                        idvar = "id")
+
+
+
+#------------------------------------------------------------------------------#
+### Notes ----------------------------------------------------------------------
+#------------------------------------------------------------------------------#
 # - One question that came up along the way is how to construct peer weights.
 
 #Warning: calculating focal proportions only for focals that have a non-missing value
